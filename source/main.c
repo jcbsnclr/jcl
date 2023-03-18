@@ -32,9 +32,13 @@ static void lookup_lc(char *src, size_t pos, size_t *l, size_t *c) {
     size_t line = 1;
     size_t col = 1;
 
-    for (size_t i = 0; i <= pos; i++) {
-        if (src[i] == '\n') line++;
-        else                col++;
+    for (size_t i = 0; i < pos; i++) {
+        if (src[i] == '\n') {
+            line++;
+            col = 1;
+            continue;
+        }
+        col++;
     }
 
     *l = line;
