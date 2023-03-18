@@ -21,7 +21,7 @@ $(BIN): $(COBJ)
 all: $(BIN)
 
 run: $(BIN)
-	./$(BIN) tests/test.jcl
+	./$(BIN) $(SCRIPT)
 
 debug: $(BIN)
 	$(DBG) $(BIN)

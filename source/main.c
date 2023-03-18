@@ -74,8 +74,11 @@ static void print_atom(atom_t a) {
     print_atom_inner(a, &ind);
 }
 
-int main(void) {
-    char *path = "tests/test.jcl";
+int main(int argc, char *argv[]) {
+    if (argc != 2)
+        die("usage: %s <script>", argc >= 1 ? argv[0] : "jcl");
+
+    char *path = argv[1];
     size_t len;
     char *src = read_str(path, &len);
 
