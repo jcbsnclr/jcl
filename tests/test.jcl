@@ -1,5 +1,3 @@
-var i 10;
-echo i;
-if [lt i 30] {
-    echo [add i 20];
-};
+# the most simple test I could think to try and get running :^)
+echo 1;
+echo 123;

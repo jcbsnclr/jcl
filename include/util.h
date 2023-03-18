@@ -3,6 +3,7 @@
 #include <stdarg.h>
 #include <stdio.h>
 #include <stdint.h>
+#include <stdbool.h>
 
 /*
  * stretchy buffer (à la stb)
@@ -56,3 +57,7 @@ void buf_free(void *buf);
 void die(char *fmt, ...);
 // report error message and errno string
 void die_errno(char *fmt, ...);
+
+#define die_assert(cond, ...) \
+    if (!(cond)) \
+        die("assertion '" #cond "' failed: " __VA_ARGS__)

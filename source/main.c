@@ -1,6 +1,7 @@
 #include <util.h>
 #include <lexer.h>
 #include <parser.h>
+#include <rt.h>
 
 #include <stdio.h>
 #include <stdint.h>
@@ -28,6 +29,7 @@ static char *read_str(char *path, size_t *len) {
     return buf;
 }
 
+// turn a linear index into a string into a line and column (1-based)
 static void lookup_lc(char *src, size_t pos, size_t *l, size_t *c) {
     size_t line = 1;
     size_t col = 1;
@@ -95,6 +97,7 @@ int main(int argc, char *argv[]) {
     // parse input
     atom_t at;
     parse_err_t err;
+    // if parse returns false, report error to user
     if (!parse(&lx, &at, &err)) {
         size_t line, col;
         lookup_lc(lx.src, err.pos, &line, &col);
@@ -131,6 +134,8 @@ int main(int argc, char *argv[]) {
     }
 
     print_atom(at);
+    puts("---");
+    rt_run(&at);
 
     free(src);
 
