@@ -14,9 +14,9 @@ impl Span {
         Span { start, end }
     }
 
-    /// Create a new [`Span`] over a single UTF-8 encoded char
-    fn starting_at(start: usize, with: char) -> Span {
-        Span::new(start, start + with.len_utf8())
+    /// Create a new [`Span`] with a given `start` position
+    fn starting_at(start: usize) -> Span {
+        Span::new(start, start)
     }
 
     /// Extend the [`Span`] by the UTF-8 encoded length of a given `char`
@@ -53,8 +53,7 @@ pub enum TokenKind {
 
     Identifier,
     String,
-    Number,
-
+    //Number,
     /// Catch-all for any characters that are not handled by the other cases
     Other(char),
 }
@@ -112,8 +111,8 @@ impl<'a> Lexer<'a> {
     /// Produce a [`Token`] of a given [`TokenKind`] while the stream matches a predicate.
     /// It returns `None` if the first char it consumes does not match the predicate.
     fn produce_while(&mut self, kind: TokenKind, pred: impl Fn(char) -> bool) -> Option<Token<'a>> {
-        let &(start, c) = self.stream.peek()?;
-        let mut span = Span::starting_at(start, c);
+        let &(start, _) = self.stream.peek()?;
+        let mut span = Span::starting_at(start);
 
         self.take_while(&mut span, pred);
 
@@ -127,7 +126,6 @@ impl<'a> Iterator for Lexer<'a> {
     fn next(&mut self) -> Option<Token<'a>> {
         let &(_, c) = self.stream.peek()?;
 
-        dbg!(c);
         match c {
             c if c.is_whitespace() => {
                 self.produce_while(TokenKind::Whitespace, char::is_whitespace)
@@ -150,7 +148,7 @@ impl<'a> Lexer<'a> {
     /// Produce a string literal [`Token`] between 2 un-escaped `"` characters
     fn produce_string(&mut self) -> Option<Token<'a>> {
         let (start, c) = self.stream.next()?;
-        let mut span = Span::starting_at(start, c);
+        let mut span = Span::starting_at(start);
 
         // this function should only be called when the next char is `"`
         debug_assert_eq!(c, '"');
@@ -177,7 +175,7 @@ impl<'a> Lexer<'a> {
     /// Produce a punctuation [`Token`]
     fn produce_punctuation(&mut self) -> Option<Token<'a>> {
         let (start, c) = self.stream.next()?;
-        let span = Span::starting_at(start, c);
+        let span = Span::new(start, start + c.len_utf8());
 
         // determine token kind from char
         let kind = match c {
