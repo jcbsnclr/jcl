@@ -35,3 +35,4 @@ if [lt age 18] then: {
 } else: {
 	echo "You are old enough to buy alcohol";
 };
+  

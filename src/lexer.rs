@@ -2,7 +2,7 @@ use std::iter::Peekable;
 use std::str::CharIndices;
 
 /// A [`Span`] represents a slice of a source string
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Span {
     start: usize,
     end: usize,
@@ -14,14 +14,14 @@ impl Span {
         Span { start, end }
     }
 
-    /// Create a new [`Span`] over one byte
-    fn starting_at(start: usize) -> Span {
-        Span::new(start, start + 1)
+    /// Create a new [`Span`] over a single UTF-8 encoded char
+    fn starting_at(start: usize, with: char) -> Span {
+        Span::new(start, start + with.len_utf8())
     }
 
     /// Extend the [`Span`] by the UTF-8 encoded length of a given `char`
     fn extend_by(&mut self, c: char) {
-        self.end = self.end + c.len_utf8();
+        self.end += c.len_utf8();
     }
 
     /// Get a [`std::ops::Range`] representing the [`Span`]
@@ -31,7 +31,7 @@ impl Span {
 }
 
 /// The different kinds of brackets
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum BracketKind {
     Paren,
     Square,
@@ -39,13 +39,14 @@ pub enum BracketKind {
 }
 
 /// The different types of [`Token`] found in the language
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum TokenKind {
     Comment,
     Whitespace,
 
     Colon,
     Semicolon,
+    Pipe,
 
     Open(BracketKind),
     Close(BracketKind),
@@ -59,7 +60,7 @@ pub enum TokenKind {
 }
 
 /// A [`Token`] describes a piece of a source string
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Token<'a> {
     /// The [`Span`] the token occupies
     span: Span,
@@ -70,6 +71,9 @@ pub struct Token<'a> {
 }
 
 /// The [`Lexer`] is an iterator over [`Token`]s within a source string
+///
+/// **Note:** The [`Lexer`] performs no real input validation; it should
+/// function without fail given any valid UTF-8 string
 pub struct Lexer<'a> {
     source: &'a str,
     stream: Peekable<CharIndices<'a>>,
@@ -108,8 +112,8 @@ impl<'a> Lexer<'a> {
     /// Produce a [`Token`] of a given [`TokenKind`] while the stream matches a predicate.
     /// It returns `None` if the first char it consumes does not match the predicate.
     fn produce_while(&mut self, kind: TokenKind, pred: impl Fn(char) -> bool) -> Option<Token<'a>> {
-        let &(start, _) = self.stream.peek()?;
-        let mut span = Span::starting_at(start);
+        let &(start, c) = self.stream.peek()?;
+        let mut span = Span::starting_at(start, c);
 
         self.take_while(&mut span, pred);
 
@@ -123,6 +127,7 @@ impl<'a> Iterator for Lexer<'a> {
     fn next(&mut self) -> Option<Token<'a>> {
         let &(_, c) = self.stream.peek()?;
 
+        dbg!(c);
         match c {
             c if c.is_whitespace() => {
                 self.produce_while(TokenKind::Whitespace, char::is_whitespace)
@@ -133,13 +138,69 @@ impl<'a> Iterator for Lexer<'a> {
             }
 
             '#' => self.produce_while(TokenKind::Comment, |c| c != '\n'),
+            '"' => self.produce_string(),
 
-            c => unimplemented!("{c}"),
+            _ => self.produce_punctuation(),
         }
     }
 }
 
-// rules for the lexer
+// production rules for complex tokens
+impl<'a> Lexer<'a> {
+    /// Produce a string literal [`Token`] between 2 un-escaped `"` characters
+    fn produce_string(&mut self) -> Option<Token<'a>> {
+        let (start, c) = self.stream.next()?;
+        let mut span = Span::starting_at(start, c);
+
+        // this function should only be called when the next char is `"`
+        debug_assert_eq!(c, '"');
+
+        // consume input
+        while let Some((_, c)) = self.stream.next() {
+            // extend span to include current char
+            span.extend_by(c);
+
+            if c == '\\' {
+                // escape next char, and extend span to include it
+                if let Some((_, c)) = self.stream.next() {
+                    span.extend_by(c);
+                }
+            } else if c == '"' {
+                // string ended; break from loop
+                break;
+            }
+        }
+
+        Some(self.produce_token(TokenKind::String, span))
+    }
+
+    /// Produce a punctuation [`Token`]
+    fn produce_punctuation(&mut self) -> Option<Token<'a>> {
+        let (start, c) = self.stream.next()?;
+        let span = Span::starting_at(start, c);
+
+        // determine token kind from char
+        let kind = match c {
+            '(' => TokenKind::Open(BracketKind::Paren),
+            '[' => TokenKind::Open(BracketKind::Square),
+            '{' => TokenKind::Open(BracketKind::Brace),
+
+            '}' => TokenKind::Close(BracketKind::Paren),
+            ']' => TokenKind::Close(BracketKind::Square),
+            ')' => TokenKind::Close(BracketKind::Brace),
+
+            ':' => TokenKind::Colon,
+            ';' => TokenKind::Semicolon,
+            '|' => TokenKind::Pipe,
+
+            c => TokenKind::Other(c),
+        };
+
+        Some(self.produce_token(kind, span))
+    }
+}
+
+/// Rules for producing [`Token`]s
 mod rules {
     /// The start of an identifier. Can be any valid Unicode alphabetic character, or an underscore
     pub fn identifier_start(c: char) -> bool {
@@ -149,5 +210,25 @@ mod rules {
     /// The body of an identifier. Can be any valid [`identifier_start`], or any valid Unicode numeric character
     pub fn identifier_body(c: char) -> bool {
         identifier_start(c) || c.is_numeric()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn lex_basic() {
+        let source = "foo bar baz";
+        let mut lexer = Lexer::from_source(source);
+
+        assert_eq!(
+            lexer.next(),
+            Some(Token {
+                span: Span::new(0, 3),
+                kind: TokenKind::Identifier,
+                view: "foo"
+            })
+        );
     }
 }
