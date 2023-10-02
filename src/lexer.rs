@@ -1,3 +1,4 @@
+use std::fmt;
 use std::iter::Peekable;
 use std::str::CharIndices;
 
@@ -27,6 +28,19 @@ impl Span {
     /// Get a [`std::ops::Range`] representing the [`Span`]
     pub fn as_range(self) -> std::ops::Range<usize> {
         self.start..self.end
+    }
+
+    /// Join 2 [`Span`]s together, producing a span over `self.start..rhs.end`
+    pub fn join_with(&mut self, rhs: Span) {
+        // make sure rhs extends beyond self
+        debug_assert!(rhs.end > self.end);
+
+        self.end = rhs.end;
+    }
+
+    /// Returns a [`Span`] starting at index 0
+    pub fn from_start() -> Span {
+        Span::starting_at(0)
     }
 }
 
@@ -69,6 +83,20 @@ pub struct Token<'a> {
     view: &'a str,
 }
 
+impl<'a> Token<'a> {
+    pub fn span(&self) -> Span {
+        self.span
+    }
+
+    pub fn kind(&self) -> TokenKind {
+        self.kind
+    }
+
+    pub fn view(&self) -> &'a str {
+        self.view
+    }
+}
+
 /// The [`Lexer`] is an iterator over [`Token`]s within a source string
 ///
 /// **Note:** The [`Lexer`] performs no real input validation; it should
@@ -85,6 +113,10 @@ impl<'a> Lexer<'a> {
             source,
             stream: source.char_indices().peekable(),
         }
+    }
+
+    pub fn extract(&self, span: Span) -> &'a str {
+        &self.source[span.as_range()]
     }
 
     /// Extend a [`Span`] while the stream matches a predicate
@@ -228,5 +260,17 @@ mod tests {
                 view: "foo"
             })
         );
+    }
+}
+
+impl<'a> fmt::Display for Token<'a> {
+    fn fmt(&self, fmt: &mut fmt::Formatter) -> fmt::Result {
+        write!(
+            fmt,
+            "[{}->{}] - {:?} {:?}",
+            self.span.start, self.span.end, self.kind, self.view
+        )?;
+
+        Ok(())
     }
 }

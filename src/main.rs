@@ -1,13 +1,11 @@
 mod lexer;
+mod tree;
 
 use lexer::Lexer;
 
 fn main() {
     let source = std::fs::read_to_string("examples/test.jcl").unwrap();
+    let tree = tree::TokenTree::from_source(&source);
 
-    println!("source len: {}", source.len());
-
-    for token in Lexer::from_source(&source) {
-        println!("token: {:?}", token);
-    }
+    dbg!(tree);
 }
